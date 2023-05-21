@@ -17,18 +17,19 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn new(id: i32) -> Self {
+    pub fn new(local_id: i32, global_id: i32) -> Self {
         return Self {
-            global_id: id,
-            local_id: id,
+            global_id: global_id,
+            local_id: local_id,
             adj: vec![],
             active_edges: 0,
             inactive_edges: 0,
         };
     }
 
-    pub fn add_edge(&mut self, inno_number: i32, to: Rc<RefCell<Node>>) {
-        self.adj.push(Connection::new(inno_number, to));
+    pub fn add_edge(&mut self, inno_number: i32, weight: f64, active: bool, to: Rc<RefCell<Node>>) {
+        self.adj
+            .push(Connection::new(inno_number, weight, active, to));
     }
 
     pub fn disable_edge(&mut self, to: i32) {
@@ -40,18 +41,28 @@ impl Node {
         }
     }
 
+    pub fn edge_weight(&self, to: i32) -> f64 {
+        for e in &self.adj {
+            let v = e.to.borrow_mut();
+            if v.local_id == to {
+                return e.weight;
+            }
+        }
+        return -1.0;
+    }
+
     pub fn del_back(&mut self) {
         self.adj.pop();
     }
 }
 
 impl Connection {
-    pub fn new(inno_number: i32, to: Rc<RefCell<Node>>) -> Self {
+    pub fn new(inno_number: i32, weight: f64, active: bool, to: Rc<RefCell<Node>>) -> Self {
         return Self {
             inno_number: inno_number,
             to: to,
-            weight: 1.0,
-            active: true,
+            weight: weight,
+            active: active,
         };
     }
 }

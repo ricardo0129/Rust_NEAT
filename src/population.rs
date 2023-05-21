@@ -63,11 +63,22 @@ impl Population {
             //Try to split a connection
             let e: (i32, i32) = self.population[id as usize].random_split();
             if e.0 != -1 {
-                //self.population[id as usize].split_edge(0, 0, 0, 0)
+                let u_global = self.population[id as usize].local_to_global(e.0);
+                let v_global = self.population[id as usize].local_to_global(e.1);
+                let split_node = self.get_inno_split(u_global, v_global);
+                let inno = self.get_inno_edge(u_global, split_node);
+                self.get_inno_edge(split_node, v_global);
+                self.population[id as usize].split_edge(e.0, e.1, inno, split_node);
             }
         } else {
             //Try to add new connection
             let e: (i32, i32) = self.population[id as usize].random_edge();
+            if e.0 != -1 {
+                let u_global = self.population[id as usize].local_to_global(e.0);
+                let v_global = self.population[id as usize].local_to_global(e.1);
+                let inno = self.get_inno_edge(u_global, v_global);
+                self.population[id as usize].add_edge(e.0, e.1, inno, 1.0, true);
+            }
         }
     }
 }

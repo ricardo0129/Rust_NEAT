@@ -1,47 +1,22 @@
-use std::collections::BTreeMap;
-struct Node {
-    key: i32,
-    left: Option<Box<Node>>,
-    right: Option<Box<Node>>,
+use crate::genome::Genome;
+
+#[test]
+fn fully_connected() {
+    let mut g = Genome::new(4, 4);
+    g.connect_ends();
+    let input: Vec<f64> = vec![1.0; 4 as usize];
+    let output = g.evaluate(input);
+    let expected = vec![4.0, 4.0, 4.0, 4.0];
+    assert_eq!(output, expected);
 }
 
-impl Node {
-    fn new(key: i32) -> Self {
-        return Self {
-            key: key,
-            left: None,
-            right: None,
-        };
-    }
-
-    fn add(&mut self, key: i32) {
-        if key < self.key {
-            if let Some(ref mut node) = self.left {
-                node.add(key);
-            } else {
-                self.left = Some(Box::new(Node::new(key)));
-            }
-        } else {
-            if let Some(ref mut node) = self.right {
-                node.add(key);
-            } else {
-                self.right = Some(Box::new(Node::new(key)));
-            }
-        }
-    }
-
-    fn dfs(&self) {
-        if let Some(ref node) = self.left {
-            node.dfs();
-        }
-        //println!("{}", self.key);
-        if let Some(ref node) = self.right {
-            node.dfs();
-        }
-    }
-}
-
-fn main() {
-    let key = (12, 12);
-    println!("{}", key.0);
+#[test]
+fn split_node_working() {
+    let mut g = Genome::new(1, 1);
+    g.add_edge(0, 1, 1, 10.0, true);
+    g.split_edge(0, 1, 2, 10);
+    let input: Vec<f64> = vec![1.0; 1 as usize];
+    let output = g.evaluate(input);
+    let expected = vec![10.0];
+    assert_eq!(output, expected);
 }
