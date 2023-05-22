@@ -1,7 +1,7 @@
-use crate::node::Node;
+use crate::node::{Connection, Node};
 use rand::Rng;
 use std::cell::RefCell;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::rc::Rc;
 
 pub struct Genome {
@@ -15,11 +15,11 @@ pub struct Genome {
 }
 
 pub struct GenomeInfo {
-    from: i32,
-    to: i32,
-    innovation_number: i32,
-    weight: f64,
-    disable_bit: bool,
+    pub from: i32,
+    pub to: i32,
+    pub innovation_number: i32,
+    pub weight: f64,
+    pub active: bool,
 }
 
 impl Genome {
@@ -43,23 +43,42 @@ impl Genome {
         };
     }
 
-    pub fn from_genes(genes: Vec<GenomeInfo>, input_nodes: i32, output_nodes: i32) -> Self {
+    pub fn un_flatten(genes: &Vec<GenomeInfo>, input_nodes: i32, output_nodes: i32) -> Self {
         let mut base: Genome = Genome::new(input_nodes, output_nodes);
         let mut unique: BTreeSet<i32> = BTreeSet::new();
+        let mut mapping: BTreeMap<i32, i32> = BTreeMap::new();
         for g in genes {
             unique.insert(g.from);
             unique.insert(g.to);
         }
         for g in unique {
+            mapping.insert(g, mapping.len() as i32);
             if g >= input_nodes + output_nodes {
                 base.add_node(g);
             }
         }
+        for g in genes {
+            let u = *mapping.get(&g.from).unwrap();
+            let v = *mapping.get(&g.to).unwrap();
+            base.add_edge(u, v, g.innovation_number, g.weight, g.active);
+        }
         return base;
     }
 
-    pub fn flatten(&mut self) -> Vec<GenomeInfo> {
-        let genes: Vec<GenomeInfo> = vec![];
+    pub fn flatten(&self) -> Vec<GenomeInfo> {
+        let mut genes: Vec<GenomeInfo> = vec![];
+        for n in &self.nodes {
+            for edge in &n.borrow().adj {
+                genes.push(GenomeInfo {
+                    from: n.borrow().global_id,
+                    to: edge.to.borrow().global_id,
+                    innovation_number: edge.inno_number,
+                    weight: edge.weight,
+                    active: edge.active,
+                });
+            }
+        }
+        genes.sort_by_key(|s| s.innovation_number);
         genes
     }
 
@@ -164,7 +183,7 @@ impl Genome {
         return (-1, -1);
     }
 
-    pub fn evaluate(&self, input: Vec<f64>) -> Vec<f64> {
+    pub fn evaluate(&self, input: &Vec<f64>) -> Vec<f64> {
         //Use topological sorting to evaluate outputs of the network
         //given an input vector
         let mut in_deg: Vec<i32> = vec![0; self.num_nodes as usize];

@@ -1,6 +1,6 @@
 use crate::genome::Genome;
 use rand::Rng;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub struct Population {
     population: Vec<Genome>,
@@ -80,5 +80,65 @@ impl Population {
                 self.population[id as usize].add_edge(e.0, e.1, inno, 1.0, true);
             }
         }
+    }
+
+    // from: i32,
+    // to: i32,
+    // innovation_number: i32,
+    // weight: f64,
+    // active: bool,
+    fn breed(&mut self, u: i32, v: i32) -> Genome {
+        //Assume u is the more fit parent
+        //For matching genes randomley pick between both parents
+        //Otherwise only chose the more fit parents genes
+        let genome_u = self.population[u as usize].flatten();
+        let genome_v = self.population[v as usize].flatten();
+        let mut i: usize = 0;
+        let mut j: usize = 0;
+        let mut base: Genome = Genome::new(self.inputs, self.outputs);
+        let mut unique: BTreeSet<i32> = BTreeSet::new();
+        let mut mapping: BTreeMap<i32, i32> = BTreeMap::new();
+        for g in &genome_u {
+            unique.insert(g.from);
+            unique.insert(g.to);
+        }
+        for g in unique {
+            mapping.insert(g, mapping.len() as i32);
+            if g >= self.inputs + self.outputs {
+                base.add_node(g);
+            }
+        }
+        while i < genome_u.len() && j < genome_v.len() {
+            let v1: i32 = genome_u[i].innovation_number;
+            let v2: i32 = genome_v[j].innovation_number;
+            let u: i32 = *mapping.get(&genome_u[i].from).unwrap();
+            let v: i32 = *mapping.get(&genome_u[i].to).unwrap();
+            if v1 == v2 {
+                let choice: f64 = rand::thread_rng().gen();
+                assert_eq!(genome_u[i].from, genome_v[i].from);
+                assert_eq!(genome_u[i].to, genome_v[i].to);
+                if choice < 0.5 {
+                    base.add_edge(u, v, v1, genome_u[i].weight, genome_u[i].active);
+                } else {
+                    base.add_edge(u, v, v1, genome_v[i].weight, genome_v[i].active);
+                }
+                i += 1;
+                j += 1;
+            } else if v1 < v2 {
+                base.add_edge(u, v, v1, genome_u[i].weight, genome_u[i].active);
+                i += 1;
+            } else {
+                j += 1;
+            }
+        }
+        while i < genome_u.len() {
+            let v1: i32 = genome_u[i].innovation_number;
+            let u: i32 = *mapping.get(&genome_u[i].from).unwrap();
+            let v: i32 = *mapping.get(&genome_u[i].to).unwrap();
+            base.add_edge(u, v, v1, genome_u[i].weight, genome_u[i].active);
+            i += 1;
+        }
+        //we dont care about the excess genes from parent v
+        return base;
     }
 }

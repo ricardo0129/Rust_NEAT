@@ -8,7 +8,7 @@ fn main() {
     let mut g1 = Genome::new(3, 2);
     let vals = vec![1.0; 3];
     g1.connect_ends();
-    let outs = g1.evaluate(vals);
+    let outs = g1.evaluate(&vals);
     for o in outs {
         println!("{}", o);
     }
