@@ -1,17 +1,18 @@
-use crate::node::{Connection, Node};
+use crate::node::Node;
 use rand::Rng;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::rc::Rc;
 
 pub struct Genome {
-    input_nodes: i32,
-    output_nodes: i32,
-    hidden_nodes: i32,
-    nodes: Vec<Rc<RefCell<Node>>>,
-    num_nodes: i32,
-    num_connections: i32,
-    edges: BTreeSet<(i32, i32)>,
+    pub input_nodes: i32,
+    pub output_nodes: i32,
+    pub hidden_nodes: i32,
+    pub nodes: Vec<Rc<RefCell<Node>>>,
+    pub num_nodes: i32,
+    pub num_connections: i32,
+    pub edges: BTreeSet<(i32, i32)>,
+    pub act: fn(f64) -> f64,
 }
 
 pub struct GenomeInfo {
@@ -23,14 +24,13 @@ pub struct GenomeInfo {
 }
 
 impl Genome {
-    pub fn new(input_nodes: i32, output_nodes: i32) -> Self {
+    pub fn new(input_nodes: i32, output_nodes: i32, act: fn(f64) -> f64) -> Self {
         //Initialize a Genome with no hidden nodes
         //and all Inputs connected to all Outputs
         let num_nodes = input_nodes + output_nodes;
-        let num_connections = input_nodes * output_nodes;
         let mut nodes: Vec<Rc<RefCell<Node>>> = vec![];
         for i in 0..(input_nodes + output_nodes) {
-            nodes.push(Rc::new(RefCell::new(Node::new(i, i))));
+            nodes.push(Rc::new(RefCell::new(Node::new(i, i, act))));
         }
         return Self {
             nodes: nodes,
@@ -38,13 +38,19 @@ impl Genome {
             output_nodes: output_nodes,
             hidden_nodes: 0,
             num_nodes: num_nodes,
-            num_connections: num_connections,
+            num_connections: 0,
+            act: act,
             edges: BTreeSet::new(),
         };
     }
 
-    pub fn un_flatten(genes: &Vec<GenomeInfo>, input_nodes: i32, output_nodes: i32) -> Self {
-        let mut base: Genome = Genome::new(input_nodes, output_nodes);
+    pub fn un_flatten(
+        genes: &Vec<GenomeInfo>,
+        input_nodes: i32,
+        output_nodes: i32,
+        act: fn(f64) -> f64,
+    ) -> Self {
+        let mut base: Genome = Genome::new(input_nodes, output_nodes, act);
         let mut unique: BTreeSet<i32> = BTreeSet::new();
         let mut mapping: BTreeMap<i32, i32> = BTreeMap::new();
         for g in genes {
@@ -89,7 +95,7 @@ impl Genome {
                     i,
                     j + self.input_nodes,
                     i * self.output_nodes + j,
-                    1.0,
+                    rand::thread_rng().gen(),
                     true,
                 );
             }
@@ -100,6 +106,7 @@ impl Genome {
         self.nodes.push(Rc::new(RefCell::new(Node::new(
             self.num_nodes,
             inno_number,
+            self.act,
         ))));
         self.num_nodes += 1;
         self.num_nodes - 1
@@ -107,6 +114,7 @@ impl Genome {
 
     pub fn add_edge(&mut self, from: i32, to: i32, inno_number: i32, weight: f64, active: bool) {
         self.edges.insert((from, to));
+        self.num_connections += 1;
         self.nodes[from as usize].borrow_mut().add_edge(
             inno_number,
             weight,
@@ -116,6 +124,7 @@ impl Genome {
     }
 
     pub fn rm_last(&mut self, from: i32) {
+        self.num_connections -= 1;
         self.nodes[from as usize].borrow_mut().del_back();
     }
 
@@ -123,9 +132,20 @@ impl Genome {
         self.edges.contains(&(u_id, v_id))
     }
 
+    pub fn edge_exist(&self, from: i32, to: i32) -> bool {
+        self.nodes[from as usize].borrow().edge_exist(to)
+    }
+
     pub fn disable_edge(&mut self, from: i32, to: i32) {
         self.edges.remove(&(from, to));
+        self.num_connections -= 1;
         self.nodes[from as usize].borrow_mut().disable_edge(to);
+    }
+
+    pub fn enable_edge(&mut self, from: i32, to: i32) {
+        self.edges.insert((from, to));
+        self.num_connections += 1;
+        self.nodes[from as usize].borrow_mut().enable_edge(to);
     }
 
     pub fn split_edge(&mut self, from: i32, to: i32, inno_number: i32, new_node_id: i32) {
@@ -149,6 +169,7 @@ impl Genome {
             if u == v || self.check_edge(u, v) {
                 continue;
             }
+            //weight irrelevant since we are just checking for cycles
             self.add_edge(u, v, -1, 1.0, true);
             let cycle: bool = self.check_cycle();
             self.rm_last(u);
@@ -156,7 +177,7 @@ impl Genome {
                 //println!("Bad Edge");
                 continue;
             } else {
-                println!("Add Edge {u} {v}");
+                //println!("Add Edge {u} {v}");
                 //self.add_edge(u, v);
                 return (u, v);
             }
@@ -220,6 +241,7 @@ impl Genome {
                 node_values[v.local_id as usize] += node_values[u as usize] * neighboor.weight;
                 in_deg[v.local_id as usize] -= 1;
                 if in_deg[v.local_id as usize] == 0 {
+                    node_values[v.local_id as usize] = v.evaluate(node_values[v.local_id as usize]);
                     q.push_back(v.local_id);
                 }
             }

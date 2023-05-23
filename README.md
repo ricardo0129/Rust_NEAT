@@ -8,8 +8,3 @@ and the weight parameters.
 #### TODO
 
 - Add speciation
-- fitness function
-- flatten network
-- unflatten network
-- species breeding 
-

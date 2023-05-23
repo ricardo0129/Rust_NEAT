@@ -1,37 +1,56 @@
+use crate::constants::*;
 use crate::genome::Genome;
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
 
+pub struct Species {
+    pub organisms: Vec<i32>,
+    pub leader: i32,
+}
+
+impl Species {
+    pub fn new() -> Self {
+        return Self {
+            organisms: vec![],
+            leader: 0,
+        };
+    }
+}
+
 pub struct Population {
-    population: Vec<Genome>,
-    inno_count: i32,
-    unique_nodes: i32,
-    inno_split: BTreeMap<(i32, i32), i32>,
-    inno_edges: BTreeMap<(i32, i32), i32>,
-    inputs: i32,
-    outputs: i32,
+    pub population: Vec<Genome>,
+    pub inno_count: i32,
+    pub unique_nodes: i32,
+    pub inno_split: BTreeMap<(i32, i32), i32>,
+    pub inno_edges: BTreeMap<(i32, i32), i32>,
+    pub inputs: i32,
+    pub outputs: i32,
+    pub act: fn(f64) -> f64,
+    pub previous_gen: Vec<Species>,
 }
 
 impl Population {
-    fn new(size: i32, inputs: i32, outputs: i32) -> Self {
+    pub fn new(size: i32, inputs: i32, outputs: i32, act: fn(f64) -> f64) -> Self {
         let mut pop: Vec<Genome> = vec![];
         for _ in 0..size {
-            let mut g = Genome::new(inputs, outputs);
+            let mut g = Genome::new(inputs, outputs, act);
             g.connect_ends();
             pop.push(g);
         }
         return Self {
+            previous_gen: vec![],
             population: pop,
             inno_count: inputs * outputs,
             unique_nodes: inputs + outputs,
             inno_split: BTreeMap::new(),
             inno_edges: BTreeMap::new(),
+            act: act,
             inputs: inputs,
             outputs: outputs,
         };
     }
 
-    fn initialize_inno(&mut self) {
+    pub fn initialize_inno(&mut self) {
         for i in 0..self.inputs {
             for j in 0..self.outputs {
                 self.inno_edges
@@ -40,7 +59,7 @@ impl Population {
         }
     }
 
-    fn get_inno_split(&mut self, from: i32, to: i32) -> i32 {
+    pub fn get_inno_split(&mut self, from: i32, to: i32) -> i32 {
         if !self.inno_split.contains_key(&(from, to)) {
             self.inno_split.insert((from, to), self.unique_nodes);
             self.unique_nodes += 1;
@@ -48,7 +67,7 @@ impl Population {
         *self.inno_split.get(&(from, to)).unwrap()
     }
 
-    fn get_inno_edge(&mut self, from: i32, to: i32) -> i32 {
+    pub fn get_inno_edge(&mut self, from: i32, to: i32) -> i32 {
         if !self.inno_edges.contains_key(&(from, to)) {
             self.inno_edges.insert((from, to), self.inno_count);
             self.inno_count += 1;
@@ -56,7 +75,7 @@ impl Population {
         *self.inno_edges.get(&(from, to)).unwrap()
     }
 
-    fn mutate(&mut self, id: i32) {
+    pub fn mutate(&mut self, id: i32) {
         //Mutate the nth Genome
         let choice: f64 = rand::thread_rng().gen();
         if choice < 0.3 {
@@ -77,17 +96,16 @@ impl Population {
                 let u_global = self.population[id as usize].local_to_global(e.0);
                 let v_global = self.population[id as usize].local_to_global(e.1);
                 let inno = self.get_inno_edge(u_global, v_global);
-                self.population[id as usize].add_edge(e.0, e.1, inno, 1.0, true);
+                if self.population[id as usize].edge_exist(e.0, e.1) {
+                    self.population[id as usize].enable_edge(e.0, e.1);
+                } else {
+                    self.population[id as usize].add_edge(e.0, e.1, inno, 1.0, true);
+                }
             }
         }
     }
 
-    // from: i32,
-    // to: i32,
-    // innovation_number: i32,
-    // weight: f64,
-    // active: bool,
-    fn breed(&mut self, u: i32, v: i32) -> Genome {
+    pub fn breed(&mut self, u: i32, v: i32) -> Genome {
         //Assume u is the more fit parent
         //For matching genes randomley pick between both parents
         //Otherwise only chose the more fit parents genes
@@ -95,7 +113,7 @@ impl Population {
         let genome_v = self.population[v as usize].flatten();
         let mut i: usize = 0;
         let mut j: usize = 0;
-        let mut base: Genome = Genome::new(self.inputs, self.outputs);
+        let mut base: Genome = Genome::new(self.inputs, self.outputs, self.act);
         let mut unique: BTreeSet<i32> = BTreeSet::new();
         let mut mapping: BTreeMap<i32, i32> = BTreeMap::new();
         for g in &genome_u {
@@ -140,5 +158,100 @@ impl Population {
         }
         //we dont care about the excess genes from parent v
         return base;
+    }
+
+    pub fn evaluate_all(
+        &self,
+        inputs: &Vec<f64>,
+        metric: fn(&Vec<f64>, &Vec<f64>) -> f64,
+    ) -> Vec<f64> {
+        //Given an input vector return an array of fitness functions for each individual in the
+        //population
+        let mut fitness: Vec<f64> = vec![];
+        for sp in &self.population {
+            let fit = metric(&inputs, &sp.evaluate(inputs));
+            fitness.push(fit);
+        }
+        return fitness;
+    }
+
+    pub fn delta(&self, u: &Genome, v: &Genome) -> f64 {
+        //calculate combatability between two organisms
+        let genome_u = u.flatten();
+        let genome_v = v.flatten();
+        let mut i: usize = 0;
+        let mut j: usize = 0;
+        let mut disjoint: i32 = 0;
+        let mut matching: i32 = 0;
+        let mut excess: i32 = 0;
+        let mut weights: f64 = 0.0;
+        while i < genome_u.len() && j < genome_v.len() {
+            if genome_u[i].innovation_number == genome_v[j].innovation_number {
+                weights += f64::abs(genome_u[i].weight - genome_v[i].weight);
+                matching += 1;
+                i += 1;
+                j += 1;
+            } else if genome_u[i].innovation_number < genome_v[j].innovation_number {
+                disjoint += 1;
+                i += 1;
+            } else {
+                j += 1;
+            }
+        }
+        excess += i32::abs((genome_u.len() - i) as i32) + i32::abs((genome_v.len() - j) as i32);
+        let mut n: i32 = i32::max(genome_u.len() as i32, genome_v.len() as i32);
+        if n < 20 {
+            n = 1;
+        }
+        let n: f64 = n as f64;
+        let matching: f64 = matching as f64;
+        let delta: f64 =
+            (C1 * (excess as f64)) / n + (C2 * (disjoint as f64)) / n + (C3 * weights) / matching;
+        return delta;
+    }
+
+    pub fn speciate(&self, new_gen: &Vec<Genome>) -> Vec<Species> {
+        let mut sp: Vec<Species> = vec![];
+        let mut leaders: Vec<&Genome> = vec![];
+        for i in 0..self.previous_gen.len() {
+            leaders.push(&self.population[self.previous_gen[i].leader as usize]);
+            sp.push(Species::new());
+        }
+        let mut idx: i32 = 0;
+        for p in new_gen {
+            let mut added: bool = false;
+            for i in 0..leaders.len() {
+                let d: f64 = self.delta(leaders[i], &p);
+                if d < 0.2 {
+                    added = true;
+                    sp[i].organisms.push(idx);
+                    break;
+                }
+            }
+            if !added {
+                leaders.push(&new_gen[idx as usize]);
+                sp.push(Species::new());
+                let size: usize = sp.len();
+                sp[size - 1].organisms.push(idx);
+            }
+            idx += 1;
+        }
+        let mut new_species: Vec<Species> = vec![];
+        for i in 0..sp.len() {
+            if sp[i].organisms.len() == 0 {
+                continue;
+            }
+            new_species.push(Species::new());
+            for g in &sp[i].organisms {
+                let size: usize = new_species.len();
+                new_species[size - 1].organisms.push(*g);
+            }
+        }
+        for i in 0..new_species.len() {
+            let u = rand::thread_rng().gen_range(1..new_species[i].organisms.len()) - 1;
+            let leader_idx = new_species[i].organisms[u];
+            new_species[i].leader = leader_idx;
+        }
+        return sp;
     }
 }
