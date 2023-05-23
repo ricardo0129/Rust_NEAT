@@ -26,12 +26,13 @@ pub fn metric(inputs: &Vec<f64>, outputs: &Vec<f64>) -> f64 {
 }
 
 fn main() {
-    let p1: Population = Population::new(10, 2, 1, sigmoid);
+    let mut p1: Population = Population::new(10, 2, 1, sigmoid);
     let mut in1: Vec<f64> = vec![];
     in1.push(0.0);
     in1.push(1.0);
-    let outs = p1.evaluate_all(&in1, metric);
-    for o in outs {
+    let mut outs = p1.evaluate_all(&in1, metric);
+    for o in &outs {
         println!("{}", o);
     }
+    p1.next_generation(&mut outs);
 }

@@ -27,6 +27,7 @@ pub struct Population {
     pub outputs: i32,
     pub act: fn(f64) -> f64,
     pub previous_gen: Vec<Species>,
+    pub gen: i32,
 }
 
 impl Population {
@@ -38,6 +39,7 @@ impl Population {
             pop.push(g);
         }
         return Self {
+            gen: 0,
             previous_gen: vec![],
             population: pop,
             inno_count: inputs * outputs,
@@ -105,12 +107,12 @@ impl Population {
         }
     }
 
-    pub fn breed(&mut self, u: i32, v: i32) -> Genome {
+    pub fn breed(&self, u: &Genome, v: &Genome) -> Genome {
         //Assume u is the more fit parent
         //For matching genes randomley pick between both parents
         //Otherwise only chose the more fit parents genes
-        let genome_u = self.population[u as usize].flatten();
-        let genome_v = self.population[v as usize].flatten();
+        let genome_u = u.flatten();
+        let genome_v = v.flatten();
         let mut i: usize = 0;
         let mut j: usize = 0;
         let mut base: Genome = Genome::new(self.inputs, self.outputs, self.act);
@@ -248,10 +250,85 @@ impl Population {
             }
         }
         for i in 0..new_species.len() {
-            let u = rand::thread_rng().gen_range(1..new_species[i].organisms.len()) - 1;
+            let u = rand::thread_rng().gen_range(1..=new_species[i].organisms.len()) - 1;
             let leader_idx = new_species[i].organisms[u];
             new_species[i].leader = leader_idx;
         }
         return sp;
+    }
+
+    pub fn create_species(
+        &self,
+        curr_gen: &Vec<&Genome>,
+        fitness: &Vec<f64>,
+        number_offspring: i32,
+    ) -> Vec<Genome> {
+        assert_eq!(curr_gen.len(), fitness.len());
+        //only use the highest performing members of each species
+        let mut best_ones: Vec<(f64, i32)> = vec![];
+        for i in 0..fitness.len() {
+            best_ones.push((fitness[i], i as i32));
+        }
+        let top_members: i32 = ((curr_gen.len() as f64) * 0.5).round() as i32;
+        let mut new_gen: Vec<Genome> = vec![];
+        for _ in 0..number_offspring {
+            assert!(top_members > 0);
+            let u = (rand::thread_rng().gen_range(1..=top_members) - 1) as usize;
+            let v = (rand::thread_rng().gen_range(1..=top_members) - 1) as usize;
+            new_gen.push(self.breed(&curr_gen[u], &curr_gen[v]));
+        }
+        new_gen
+    }
+
+    pub fn next_generation(&mut self, fitness: &mut Vec<f64>) {
+        //population stores the current generation with an input of fitness values
+        //create a new gereration after specification
+        if self.gen == 0 {
+            self.previous_gen = self.speciate(&self.population);
+        }
+        let mut assigned: Vec<i32> = vec![0; fitness.len()];
+        let mut mapping: Vec<i32> = vec![0; self.population.len()];
+        let mut idx: i32 = 0;
+        for s in &self.previous_gen {
+            for a in &s.organisms {
+                assigned[*a as usize] = s.organisms.len() as i32;
+                mapping[*a as usize] = idx;
+            }
+            idx += 1;
+        }
+        for i in 0..fitness.len() {
+            fitness[i] = fitness[i] / (assigned[i] as f64);
+        }
+        let mut sum_fitness: f64 = 0.0;
+        let mut species_fitness: Vec<f64> = vec![0.0; self.previous_gen.len()];
+        for i in 0..fitness.len() {
+            sum_fitness += fitness[i];
+            species_fitness[mapping[i] as usize] += fitness[i];
+        }
+        let mut new_gen: Vec<Genome> = vec![];
+        let mut idx: usize = 0;
+        for s in &self.previous_gen {
+            let number_offspring: i32 = (species_fitness[idx] * (self.population.len() as f64)
+                / sum_fitness)
+                .round() as i32;
+            println!("{} {}", species_fitness[idx], number_offspring);
+            if s.organisms.len() == 0 || number_offspring == 0 {
+                continue;
+            }
+            let mut curr: Vec<&Genome> = vec![];
+            let mut fit: Vec<f64> = vec![];
+            for a in &s.organisms {
+                curr.push(&self.population[*a as usize]);
+                fit.push(fitness[*a as usize]);
+            }
+            let adding = self.create_species(&curr, &fit, number_offspring);
+            new_gen.extend(adding);
+            idx += 1;
+        }
+
+        assert_eq!(new_gen.len(), self.population.len());
+        self.previous_gen = self.speciate(&new_gen);
+        self.population = new_gen;
+        self.gen += 1;
     }
 }
