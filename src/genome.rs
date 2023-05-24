@@ -1,5 +1,5 @@
+use crate::helper::{rand_f64, rand_i32};
 use crate::node::Node;
-use rand::Rng;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::rc::Rc;
@@ -88,6 +88,16 @@ impl Genome {
         genes
     }
 
+    pub fn clone(&self) -> Self {
+        //Implemented from flatten/unflatten functions
+        Genome::un_flatten(
+            &self.flatten(),
+            self.input_nodes,
+            self.output_nodes,
+            self.act,
+        )
+    }
+
     pub fn connect_ends(&mut self) {
         for i in 0..self.input_nodes {
             for j in 0..self.output_nodes {
@@ -95,7 +105,7 @@ impl Genome {
                     i,
                     j + self.input_nodes,
                     i * self.output_nodes + j,
-                    rand::thread_rng().gen(),
+                    rand_f64(-1.0, 1.0),
                     true,
                 );
             }
@@ -160,12 +170,11 @@ impl Genome {
         for _ in 0..100 {
             //try a random edge if after 100 attempts then ignore
             //TODO change this to a more optimal way of finding random edges
-            let mut u = rand::thread_rng().gen_range(0..(self.input_nodes + self.hidden_nodes));
+            let mut u = rand_i32(0, self.input_nodes + self.hidden_nodes - 1);
             if u >= self.input_nodes {
                 u += self.output_nodes;
             }
-            let v = self.input_nodes
-                + rand::thread_rng().gen_range(0..(self.output_nodes + self.hidden_nodes));
+            let v = self.input_nodes + rand_i32(0, self.output_nodes + self.hidden_nodes - 1);
             if u == v || self.check_edge(u, v) {
                 continue;
             }
@@ -194,7 +203,8 @@ impl Genome {
         if self.edges.len() == 0 {
             return (-1, -1);
         }
-        let mut idx = rand::thread_rng().gen_range(0..self.edges.len() as usize);
+        let mut idx = rand_i32(0, self.edges.len() as i32 - 1);
+        //Iterating over all elements since self.edges is a BST
         for e in self.edges.iter() {
             if idx == 0 {
                 return (e.0, e.1);

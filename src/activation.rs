@@ -5,7 +5,3 @@ pub fn sigmoid(x: f64) -> f64 {
 pub fn ignore(x: f64) -> f64 {
     return x;
 }
-
-pub fn pertube(x: f64) -> f64 {
-    return x;
-}
