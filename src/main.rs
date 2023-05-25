@@ -18,6 +18,7 @@ pub fn mse(inputs: &Vec<f64>, outputs: &Vec<f64>) -> f64 {
         error += (inputs[i] - outputs[i]).abs();
     }
     error = error / (inputs.len() as f64);
+    //error = 1.0 / (f64::exp(error));
     return error;
 }
 
@@ -28,7 +29,7 @@ pub fn metric(inputs: &Vec<f64>, outputs: &Vec<f64>) -> f64 {
     return mse(&out, &outputs);
 }
 
-pub fn run_all(pop: &Population) -> Vec<f64> {
+pub fn run_all(pop: &Population, stop: &mut bool) -> Vec<f64> {
     let mut cummulative: Vec<f64> = vec![0.0; pop.population.len()];
     for i in 0..=1 {
         for j in 0..=1 {
@@ -43,6 +44,7 @@ pub fn run_all(pop: &Population) -> Vec<f64> {
     }
     for k in 0..cummulative.len() {
         cummulative[k] = 1.0 - cummulative[k];
+        //cummulative[k] = cummulative[k] * cummulative[k];
     }
     let max_idx: usize = cummulative
         .iter()
@@ -50,7 +52,7 @@ pub fn run_all(pop: &Population) -> Vec<f64> {
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
         .map(|(idx, _)| idx)
         .unwrap();
-    println!("best {}", cummulative[max_idx]);
+    let mut abs_error: f64 = 0.0;
     for i in 0..=1 {
         for j in 0..=1 {
             let mut in1: Vec<f64> = vec![];
@@ -58,18 +60,29 @@ pub fn run_all(pop: &Population) -> Vec<f64> {
             in1.push(j as f64);
             let outs = pop.population[max_idx].evaluate(&in1);
             let actual = i ^ j;
+            abs_error += f64::abs(actual as f64 - outs[0]);
             println!("actual {} expected {}", outs[0], actual)
         }
+    }
+    println!("best fitness {} error {}", cummulative[max_idx], abs_error);
+    if abs_error <= 0.0001 {
+        pop.population[max_idx].network_info();
+        *stop = true;
     }
     cummulative
 }
 
 fn main() {
     let mut p1: Population = Population::new(1000, 2, 1, sigmoid, true);
-    for i in 0..300 {
+    for i in 0..3000 {
         let start = Instant::now(); // Record the starting time
-        let mut outs = run_all(&p1);
+        let mut stop: bool = false;
+        let mut outs = run_all(&p1, &mut stop);
         println!("iteration {}", i);
+        if stop {
+            println!("Found Optimal Solution After {} generations", i);
+            break;
+        }
         p1.next_generation(&mut outs);
         println!("Elapsed time: {} milliseconds", start.elapsed().as_millis());
     }

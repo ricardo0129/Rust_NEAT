@@ -1,4 +1,4 @@
-use crate::helper::{rand_f64, rand_i32};
+use crate::helper::{pertube, rand_f64, rand_i32};
 use crate::node::Node;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -112,6 +112,22 @@ impl Genome {
         }
     }
 
+    pub fn permute_weights(&mut self) {
+        for n in &self.nodes {
+            for edges in &mut n.borrow_mut().adj {
+                edges.weight = pertube(edges.weight);
+            }
+        }
+    }
+
+    pub fn new_weights(&mut self) {
+        for n in &self.nodes {
+            for edges in &mut n.borrow_mut().adj {
+                edges.weight = rand_f64(-1.0, 1.0);
+            }
+        }
+    }
+
     pub fn add_node(&mut self, inno_number: i32) -> i32 {
         self.nodes.push(Rc::new(RefCell::new(Node::new(
             self.num_nodes,
@@ -158,7 +174,10 @@ impl Genome {
     }
 
     pub fn enable_edge(&mut self, from: i32, to: i32) {
-        self.edges.insert((from, to));
+        //never add a bias edge to the edge set since it will try to split it
+        if from != self.input_nodes {
+            self.edges.insert((from, to));
+        }
         self.num_connections += 1;
         self.nodes[from as usize].borrow_mut().enable_edge(to);
     }

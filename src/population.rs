@@ -108,20 +108,8 @@ impl Population {
             if genome.edge_exist(e.0, e.1) {
                 genome.enable_edge(e.0, e.1);
             } else {
-                assert!(e.0 != e.1);
                 genome.add_edge(e.0, e.1, inno, rand_f64(-1.0, 1.0), true);
             }
-        }
-    }
-
-    pub fn mutate(&mut self, genome: &mut Genome) {
-        //Mutate the nth Genome
-        if chance(0.20) {
-            //Try to split a connection
-            self.random_split(genome);
-        } else {
-            //Try to add new connection
-            self.random_edge(genome);
         }
     }
 
@@ -152,8 +140,6 @@ impl Population {
             let u: i32 = *mapping.get(&genome_u[i].from).unwrap();
             let v: i32 = *mapping.get(&genome_u[i].to).unwrap();
             if v1 == v2 {
-                assert_eq!(genome_u[i].from, genome_v[j].from);
-                assert_eq!(genome_u[i].to, genome_v[j].to);
                 let one_disabled: bool = !(genome_u[i].active && genome_v[j].active);
                 let mut active: bool;
                 let weight: f64;
@@ -167,13 +153,13 @@ impl Population {
                 if one_disabled && chance(0.75) {
                     active = false;
                 }
-                assert!(u != v);
                 base.add_edge(u, v, v1, weight, active);
                 i += 1;
                 j += 1;
             } else if v1 < v2 {
-                assert!(u != v);
-                base.add_edge(u, v, v1, genome_u[i].weight, genome_u[i].active);
+                let weight: f64 = genome_u[i].weight;
+                let active: bool = genome_u[i].active;
+                base.add_edge(u, v, v1, weight, active);
                 i += 1;
             } else {
                 j += 1;
@@ -183,8 +169,9 @@ impl Population {
             let v1: i32 = genome_u[i].innovation_number;
             let u: i32 = *mapping.get(&genome_u[i].from).unwrap();
             let v: i32 = *mapping.get(&genome_u[i].to).unwrap();
-            assert!(u != v);
-            base.add_edge(u, v, v1, genome_u[i].weight, genome_u[i].active);
+            let weight: f64 = genome_u[i].weight;
+            let active: bool = genome_u[i].active;
+            base.add_edge(u, v, v1, weight, active);
             i += 1;
         }
         //we dont care about the excess genes from parent v
@@ -297,7 +284,6 @@ impl Population {
         fitness: &Vec<f64>,
         number_offspring: i32,
     ) -> Vec<Genome> {
-        assert_eq!(curr_gen.len(), fitness.len());
         //only use the highest performing members of each species to reproduce
         //If the species has > 5 networks then keep the champion
         let mut best_ones: Vec<(f64, i32)> = vec![];
@@ -305,21 +291,36 @@ impl Population {
             best_ones.push((fitness[i], i as i32));
         }
         best_ones.sort_by(|a, b| b.partial_cmp(a).unwrap());
-        let top_members: i32 = ((curr_gen.len() as f64) * 0.35).ceil() as i32;
+        let top_members: i32 = ((curr_gen.len() as f64) * TOP_ONES).ceil() as i32;
+        //println!("top members {}", top_members);
         let mut champion_flag: i32 = 0;
         let mut new_gen: Vec<Genome> = vec![];
         if curr_gen.len() > 5 {
-            //champion_flag = ((curr_gen.len() as f64) * 0.2).floor() as i32;
+            //champion_flag = ((curr_gen.len() as f64) * 0.05).floor() as i32;
             champion_flag = 1;
-            if champion_flag > number_offspring {
-                champion_flag = number_offspring;
-            }
+            champion_flag = i32::min(champion_flag, number_offspring);
             for k in 0..champion_flag {
                 new_gen.push(curr_gen[best_ones[k as usize].1 as usize].clone())
             }
         }
-        for _ in 0..(number_offspring - champion_flag) {
-            assert!(top_members > 0);
+        let mut remaining_offspring = number_offspring - champion_flag;
+        let mut only_mutate: i32 = ((remaining_offspring as f64) * NO_CROSSING).round() as i32;
+        only_mutate = i32::min(remaining_offspring, only_mutate);
+        for _ in 0..only_mutate {
+            let mut u = (rand_i32(1, top_members) - 1) as usize;
+            u = best_ones[u].1 as usize;
+            let mut offspring = curr_gen[u].clone();
+            if chance(MUTATE_EDGES) {
+                if chance(0.9) {
+                    offspring.permute_weights();
+                } else {
+                    offspring.new_weights();
+                }
+            }
+            new_gen.push(offspring);
+        }
+        remaining_offspring -= only_mutate;
+        for _ in 0..(remaining_offspring) {
             let mut u = (rand_i32(1, top_members) - 1) as usize;
             let mut v = (rand_i32(1, top_members) - 1) as usize;
             if best_ones[u].0 < best_ones[v].0 {
@@ -327,10 +328,17 @@ impl Population {
                 u = v;
                 v = t;
             }
-            assert!(best_ones[u].0 >= best_ones[v].0);
             u = best_ones[u].1 as usize;
             v = best_ones[v].1 as usize;
-            new_gen.push(self.breed(&curr_gen[u], &curr_gen[v]));
+            let mut offspring = self.breed(&curr_gen[u], &curr_gen[v]);
+            if chance(MUTATE_EDGES) {
+                if chance(0.9) {
+                    offspring.permute_weights();
+                } else {
+                    offspring.new_weights();
+                }
+            }
+            new_gen.push(offspring);
         }
         new_gen
     }
@@ -386,6 +394,7 @@ impl Population {
         }
         let mut new_gen: Vec<Genome> = vec![];
         let mut idx: usize = 0;
+        assert!(number_offspring.len() == self.previous_gen.len());
         for s in &self.previous_gen {
             if s.organisms.len() == 0 || number_offspring[idx] == 0 {
                 idx += 1;
@@ -404,8 +413,11 @@ impl Population {
 
         assert_eq!(new_gen.len(), self.population.len());
         for i in 0..new_gen.len() {
-            if chance(0.03) {
-                self.mutate(&mut new_gen[i]);
+            if chance(RANDOM_EDGE) {
+                self.random_edge(&mut new_gen[i]);
+            }
+            if chance(RANDOM_SPLIT) {
+                self.random_split(&mut new_gen[i]);
             }
         }
         self.previous_gen = self.speciate(&new_gen);

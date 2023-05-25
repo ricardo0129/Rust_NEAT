@@ -1,4 +1,6 @@
 use rand::Rng;
+
+use crate::constants::DELTA_PERMUTE;
 pub fn chance(p: f64) -> bool {
     //given a probability returns 1 with probability p or 0 with probability 1-p
     let mut rng = rand::thread_rng();
@@ -21,6 +23,9 @@ pub fn rand_f64(a: f64, b: f64) -> f64 {
     return x;
 }
 
-pub fn pertube(x: f64) -> f64 {
+pub fn pertube(mut x: f64) -> f64 {
+    x += rand_f64(-DELTA_PERMUTE, DELTA_PERMUTE);
+    x = f64::min(x, 1.0);
+    x = f64::max(x, -1.0);
     return x;
 }
