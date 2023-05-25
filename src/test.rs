@@ -6,7 +6,11 @@ mod tests {
     #[test]
     fn fully_connected() {
         let mut g = Genome::new(4, 4, ignore);
-        g.connect_ends();
+        for i in 0..4 {
+            for j in 0..4 {
+                g.add_edge(i, 5 + j, i * 4 + j, 1.0, true);
+            }
+        }
         let input: Vec<f64> = vec![1.0; 4 as usize];
         let output = g.evaluate(&input);
         let expected = vec![4.0, 4.0, 4.0, 4.0];
@@ -16,8 +20,8 @@ mod tests {
     #[test]
     fn split_node_working() {
         let mut g = Genome::new(1, 1, ignore);
-        g.add_edge(0, 1, 1, 10.0, true);
-        g.split_edge(0, 1, 2, 10);
+        g.add_edge(0, 2, 1, 10.0, true);
+        g.split_edge(0, 2, 3, 10);
         let input: Vec<f64> = vec![1.0; 1 as usize];
         let output = g.evaluate(&input);
         let expected = vec![10.0];
@@ -27,7 +31,7 @@ mod tests {
     #[test]
     fn add_edge() {
         let mut g = Genome::new(1, 1, ignore);
-        g.add_edge(0, 1, 1, 15.0, true);
+        g.add_edge(0, 2, 1, 15.0, true);
         let input: Vec<f64> = vec![1.0; 1 as usize];
         let output = g.evaluate(&input);
         let expected = vec![15.0];
@@ -37,14 +41,14 @@ mod tests {
     #[test]
     fn disable_edge() {
         let mut g = Genome::new(1, 1, ignore);
-        g.add_edge(0, 1, 1, 15.0, true);
-        g.disable_edge(0, 1);
+        g.add_edge(0, 2, 1, 15.0, true);
+        g.disable_edge(0, 2);
         let input: Vec<f64> = vec![1.0; 1 as usize];
         let output = g.evaluate(&input);
         let expected = vec![0.0];
         assert_eq!(output, expected);
         let expected = vec![15.0];
-        g.enable_edge(0, 1);
+        g.enable_edge(0, 2);
         let output = g.evaluate(&input);
         assert_eq!(output, expected);
     }
@@ -54,7 +58,7 @@ mod tests {
         let mut g = Genome::new(5, 5, ignore);
         g.connect_ends();
         g.random_edge();
-        assert_eq!(g.num_connections, 25);
+        assert_eq!(g.num_connections, 30);
     }
 
     #[test]
@@ -72,7 +76,7 @@ mod tests {
         let mut g = Genome::new(10, 10, ignore);
         g.connect_ends();
         let temp = g.flatten();
-        assert_eq!(temp.len(), 10 * 10);
+        assert_eq!(temp.len(), 10 * 10 + 10);
     }
 
     #[test]
@@ -106,13 +110,32 @@ mod tests {
 
     #[test]
     fn population_test() {
-        let mut p = Population::new(5, 10, 10, ignore);
-        p.initialize_inno();
+        let mut p = Population::new(5, 10, 10, ignore, false);
+        for child in 0..5 {
+            for i in 0..10 {
+                for j in 0..10 {
+                    p.population[child as usize].add_edge(i, j + 10 + 1, i * 10 + j, 1.0, true);
+                }
+            }
+        }
         let input: Vec<f64> = vec![1.0; 10 as usize];
         let o: Vec<f64> = vec![10.0; 10 as usize];
         for i in 0..5 {
             let o1 = p.population[i].evaluate(&input);
             assert_eq!(o, o1);
         }
+    }
+
+    #[test]
+    fn population_mutate() {
+        fn metric(_inputs: &Vec<f64>, _outputs: &Vec<f64>) -> f64 {
+            return 1.0;
+        }
+        let mut p1: Population = Population::new(1, 1, 1, ignore, true);
+        let mut in1: Vec<f64> = vec![];
+        in1.push(1.0);
+        let mut outs = p1.evaluate_all(&in1, metric);
+        p1.next_generation(&mut outs);
+        assert!(p1.population[0].num_connections <= 2 || p1.population[0].num_nodes <= 3);
     }
 }

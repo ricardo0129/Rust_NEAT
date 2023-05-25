@@ -7,4 +7,5 @@ and the weight parameters.
 
 #### TODO
 
-- Add speciation
+- Add Bias node to networks
+- Include mutations in offsprings

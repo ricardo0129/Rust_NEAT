@@ -27,9 +27,9 @@ impl Genome {
     pub fn new(input_nodes: i32, output_nodes: i32, act: fn(f64) -> f64) -> Self {
         //Initialize a Genome with no hidden nodes
         //and all Inputs connected to all Outputs
-        let num_nodes = input_nodes + output_nodes;
+        let num_nodes = input_nodes + output_nodes + 1;
         let mut nodes: Vec<Rc<RefCell<Node>>> = vec![];
-        for i in 0..(input_nodes + output_nodes) {
+        for i in 0..(input_nodes + output_nodes + 1) {
             nodes.push(Rc::new(RefCell::new(Node::new(i, i, act))));
         }
         return Self {
@@ -59,7 +59,7 @@ impl Genome {
         }
         for g in unique {
             mapping.insert(g, mapping.len() as i32);
-            if g >= input_nodes + output_nodes {
+            if g >= input_nodes + output_nodes + 1 {
                 base.add_node(g);
             }
         }
@@ -99,11 +99,11 @@ impl Genome {
     }
 
     pub fn connect_ends(&mut self) {
-        for i in 0..self.input_nodes {
+        for i in 0..(self.input_nodes + 1) {
             for j in 0..self.output_nodes {
                 self.add_edge(
                     i,
-                    j + self.input_nodes,
+                    j + self.input_nodes + 1,
                     i * self.output_nodes + j,
                     rand_f64(-1.0, 1.0),
                     true,
@@ -123,7 +123,11 @@ impl Genome {
     }
 
     pub fn add_edge(&mut self, from: i32, to: i32, inno_number: i32, weight: f64, active: bool) {
-        self.edges.insert((from, to));
+        assert!(from != to);
+        if from != self.input_nodes {
+            //Since we wont split bias edges dont add to edge set
+            self.edges.insert((from, to));
+        }
         self.num_connections += 1;
         self.nodes[from as usize].borrow_mut().add_edge(
             inno_number,
@@ -133,8 +137,9 @@ impl Genome {
         );
     }
 
-    pub fn rm_last(&mut self, from: i32) {
+    pub fn rm_last(&mut self, from: i32, to: i32) {
         self.num_connections -= 1;
+        self.edges.remove(&(from, to));
         self.nodes[from as usize].borrow_mut().del_back();
     }
 
@@ -159,6 +164,7 @@ impl Genome {
     }
 
     pub fn split_edge(&mut self, from: i32, to: i32, inno_number: i32, new_node_id: i32) {
+        assert!(from != self.input_nodes);
         self.disable_edge(from, to);
         let old_weight = self.nodes[from as usize].borrow().edge_weight(to);
         let id = self.add_node(new_node_id);
@@ -170,24 +176,22 @@ impl Genome {
         for _ in 0..100 {
             //try a random edge if after 100 attempts then ignore
             //TODO change this to a more optimal way of finding random edges
-            let mut u = rand_i32(0, self.input_nodes + self.hidden_nodes - 1);
-            if u >= self.input_nodes {
+            let hidden_nodes = self.num_nodes - self.input_nodes - self.output_nodes - 1;
+            let mut u = rand_i32(0, self.input_nodes + hidden_nodes);
+            if u > self.input_nodes {
                 u += self.output_nodes;
             }
-            let v = self.input_nodes + rand_i32(0, self.output_nodes + self.hidden_nodes - 1);
+            let v = self.input_nodes + 1 + rand_i32(0, self.output_nodes + hidden_nodes - 1);
             if u == v || self.check_edge(u, v) {
                 continue;
             }
             //weight irrelevant since we are just checking for cycles
             self.add_edge(u, v, -1, 1.0, true);
             let cycle: bool = self.check_cycle();
-            self.rm_last(u);
+            self.rm_last(u, v);
             if cycle {
-                //println!("Bad Edge");
                 continue;
             } else {
-                //println!("Add Edge {u} {v}");
-                //self.add_edge(u, v);
                 return (u, v);
             }
         }
@@ -223,6 +227,8 @@ impl Genome {
         for i in 0..input.len() {
             node_values[i] = input[i];
         }
+        //bias node
+        node_values[self.input_nodes as usize] = 1.0;
 
         for u in &self.nodes {
             for v in &u.borrow().adj {
@@ -257,8 +263,8 @@ impl Genome {
             }
         }
 
-        return (&node_values
-            [self.input_nodes as usize..(self.input_nodes + self.output_nodes) as usize])
+        return (&node_values[(self.input_nodes + 1) as usize
+            ..(self.input_nodes + self.output_nodes + 1) as usize])
             .to_vec();
     }
 
@@ -295,5 +301,17 @@ impl Genome {
             }
         }
         return false;
+    }
+
+    pub fn network_info(&self) {
+        println!(
+            "#Nodes {}, #Edges {}, #Active Connections {}",
+            self.num_nodes,
+            self.num_connections,
+            self.edges.len(),
+        );
+        for i in 0..self.nodes.len() {
+            println!("{}", self.nodes[i].borrow().global_id);
+        }
     }
 }

@@ -1,4 +1,5 @@
 use crate::genome::Genome;
+use crate::helper::rand_f64;
 use crate::{constants::*, helper::chance, helper::rand_i32};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -30,19 +31,27 @@ pub struct Population {
 }
 
 impl Population {
-    pub fn new(size: i32, inputs: i32, outputs: i32, act: fn(f64) -> f64) -> Self {
+    pub fn new(
+        size: i32,
+        inputs: i32,
+        outputs: i32,
+        act: fn(f64) -> f64,
+        connect_ends: bool,
+    ) -> Self {
         let mut pop: Vec<Genome> = vec![];
         for _ in 0..size {
             let mut g = Genome::new(inputs, outputs, act);
-            g.connect_ends();
+            if connect_ends {
+                g.connect_ends();
+            }
             pop.push(g);
         }
         let mut obj = Self {
             gen: 0,
             previous_gen: vec![],
             population: pop,
-            inno_count: inputs * outputs,
-            unique_nodes: inputs + outputs,
+            inno_count: (inputs + 1) * outputs,
+            unique_nodes: inputs + outputs + 1,
             inno_split: BTreeMap::new(),
             inno_edges: BTreeMap::new(),
             act: act,
@@ -54,10 +63,10 @@ impl Population {
     }
 
     pub fn initialize_inno(&mut self) {
-        for i in 0..self.inputs {
+        for i in 0..(self.inputs + 1) {
             for j in 0..self.outputs {
                 self.inno_edges
-                    .insert((i, self.inputs + j), i * self.outputs + j);
+                    .insert((i, self.inputs + 1 + j), i * self.outputs + j);
             }
         }
     }
@@ -78,32 +87,41 @@ impl Population {
         *self.inno_edges.get(&(from, to)).unwrap()
     }
 
+    pub fn random_split(&mut self, genome: &mut Genome) {
+        let e: (i32, i32) = genome.random_split();
+        if e.0 != -1 {
+            let u_global = genome.local_to_global(e.0);
+            let v_global = genome.local_to_global(e.1);
+            let split_node = self.get_inno_split(u_global, v_global);
+            let inno = self.get_inno_edge(u_global, split_node);
+            self.get_inno_edge(split_node, v_global);
+            genome.split_edge(e.0, e.1, inno, split_node);
+        }
+    }
+
+    pub fn random_edge(&mut self, genome: &mut Genome) {
+        let e: (i32, i32) = genome.random_edge();
+        if e.0 != -1 {
+            let u_global = genome.local_to_global(e.0);
+            let v_global = genome.local_to_global(e.1);
+            let inno = self.get_inno_edge(u_global, v_global);
+            if genome.edge_exist(e.0, e.1) {
+                genome.enable_edge(e.0, e.1);
+            } else {
+                assert!(e.0 != e.1);
+                genome.add_edge(e.0, e.1, inno, rand_f64(-1.0, 1.0), true);
+            }
+        }
+    }
+
     pub fn mutate(&mut self, genome: &mut Genome) {
         //Mutate the nth Genome
-        if chance(0.3) {
+        if chance(0.20) {
             //Try to split a connection
-            let e: (i32, i32) = genome.random_split();
-            if e.0 != -1 {
-                let u_global = genome.local_to_global(e.0);
-                let v_global = genome.local_to_global(e.1);
-                let split_node = self.get_inno_split(u_global, v_global);
-                let inno = self.get_inno_edge(u_global, split_node);
-                self.get_inno_edge(split_node, v_global);
-                genome.split_edge(e.0, e.1, inno, split_node);
-            }
+            self.random_split(genome);
         } else {
             //Try to add new connection
-            let e: (i32, i32) = genome.random_edge();
-            if e.0 != -1 {
-                let u_global = genome.local_to_global(e.0);
-                let v_global = genome.local_to_global(e.1);
-                let inno = self.get_inno_edge(u_global, v_global);
-                if genome.edge_exist(e.0, e.1) {
-                    genome.enable_edge(e.0, e.1);
-                } else {
-                    genome.add_edge(e.0, e.1, inno, 1.0, true);
-                }
-            }
+            self.random_edge(genome);
         }
     }
 
@@ -124,7 +142,7 @@ impl Population {
         }
         for g in unique {
             mapping.insert(g, mapping.len() as i32);
-            if g >= self.inputs + self.outputs {
+            if g >= self.inputs + 1 + self.outputs {
                 base.add_node(g);
             }
         }
@@ -149,10 +167,12 @@ impl Population {
                 if one_disabled && chance(0.75) {
                     active = false;
                 }
+                assert!(u != v);
                 base.add_edge(u, v, v1, weight, active);
                 i += 1;
                 j += 1;
             } else if v1 < v2 {
+                assert!(u != v);
                 base.add_edge(u, v, v1, genome_u[i].weight, genome_u[i].active);
                 i += 1;
             } else {
@@ -163,6 +183,7 @@ impl Population {
             let v1: i32 = genome_u[i].innovation_number;
             let u: i32 = *mapping.get(&genome_u[i].from).unwrap();
             let v: i32 = *mapping.get(&genome_u[i].to).unwrap();
+            assert!(u != v);
             base.add_edge(u, v, v1, genome_u[i].weight, genome_u[i].active);
             i += 1;
         }
@@ -193,7 +214,7 @@ impl Population {
         let mut j: usize = 0;
         let mut disjoint: i32 = 0;
         let mut matching: i32 = 0;
-        let mut excess: i32 = 0;
+        let excess: i32;
         let mut weights: f64 = 0.0;
         while i < genome_u.len() && j < genome_v.len() {
             if genome_u[i].innovation_number == genome_v[j].innovation_number {
@@ -205,10 +226,11 @@ impl Population {
                 disjoint += 1;
                 i += 1;
             } else {
+                disjoint += 1;
                 j += 1;
             }
         }
-        excess += i32::abs((genome_u.len() - i) as i32) + i32::abs((genome_v.len() - j) as i32);
+        excess = i32::abs((genome_u.len() - i) as i32) + i32::abs((genome_v.len() - j) as i32);
         let mut n: i32 = i32::max(genome_u.len() as i32, genome_v.len() as i32);
         if n < 20 {
             n = 1;
@@ -224,6 +246,9 @@ impl Population {
         let mut sp: Vec<Species> = vec![];
         let mut leaders: Vec<&Genome> = vec![];
         for i in 0..self.previous_gen.len() {
+            if self.previous_gen[i].organisms.len() == 0 {
+                continue;
+            }
             leaders.push(&self.population[self.previous_gen[i].leader as usize]);
             sp.push(Species::new());
         }
@@ -232,7 +257,7 @@ impl Population {
             let mut added: bool = false;
             for i in 0..leaders.len() {
                 let d: f64 = self.delta(leaders[i], &p);
-                if d < 0.2 {
+                if d < DT {
                     added = true;
                     sp[i].organisms.push(idx);
                     break;
@@ -279,17 +304,30 @@ impl Population {
         for i in 0..fitness.len() {
             best_ones.push((fitness[i], i as i32));
         }
-        let top_members: i32 = ((curr_gen.len() as f64) * 0.5).round() as i32;
+        best_ones.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        let top_members: i32 = ((curr_gen.len() as f64) * 0.35).ceil() as i32;
         let mut champion_flag: i32 = 0;
         let mut new_gen: Vec<Genome> = vec![];
         if curr_gen.len() > 5 {
+            //champion_flag = ((curr_gen.len() as f64) * 0.2).floor() as i32;
             champion_flag = 1;
-            new_gen.push(curr_gen[best_ones[0].1 as usize].clone())
+            if champion_flag > number_offspring {
+                champion_flag = number_offspring;
+            }
+            for k in 0..champion_flag {
+                new_gen.push(curr_gen[best_ones[k as usize].1 as usize].clone())
+            }
         }
         for _ in 0..(number_offspring - champion_flag) {
             assert!(top_members > 0);
             let mut u = (rand_i32(1, top_members) - 1) as usize;
             let mut v = (rand_i32(1, top_members) - 1) as usize;
+            if best_ones[u].0 < best_ones[v].0 {
+                let t = u;
+                u = v;
+                v = t;
+            }
+            assert!(best_ones[u].0 >= best_ones[v].0);
             u = best_ones[u].1 as usize;
             v = best_ones[v].1 as usize;
             new_gen.push(self.breed(&curr_gen[u], &curr_gen[v]));
@@ -304,6 +342,7 @@ impl Population {
         if self.gen == 0 {
             self.previous_gen = self.speciate(&self.population);
         }
+        println!(" number of species {}", self.previous_gen.len());
         let mut assigned: Vec<i32> = vec![0; fitness.len()];
         let mut mapping: Vec<i32> = vec![0; self.population.len()];
         let mut idx: i32 = 0;
@@ -325,19 +364,24 @@ impl Population {
         }
         let mut number_offspring: Vec<i32> = vec![];
         let mut total: i32 = 0;
+        let mut ss: Vec<(f64, i32)> = vec![];
         for i in 0..self.previous_gen.len() {
+            ss.push((species_fitness[i], i as i32));
             let val: i32 =
                 (species_fitness[i] * (self.population.len() as f64) / sum_fitness).floor() as i32;
             total += val;
             number_offspring.push(val);
         }
+        ss.sort_by(|a, b| b.partial_cmp(a).unwrap());
         let mut idx: usize = 0;
-        while idx < self.previous_gen.len() && total < self.population.len() as i32 {
-            if self.previous_gen[idx].organisms.len() == 0 {
-                idx += 1;
+        while total < self.population.len() as i32 {
+            let numb = self.previous_gen[ss[idx].1 as usize].organisms.len() == 0;
+            if numb || idx == self.previous_gen.len() {
+                idx = 0;
                 continue;
             }
-            number_offspring[idx] += 1;
+            number_offspring[ss[idx].1 as usize] += 1;
+            idx += 1;
             total += 1;
         }
         let mut new_gen: Vec<Genome> = vec![];
@@ -360,7 +404,7 @@ impl Population {
 
         assert_eq!(new_gen.len(), self.population.len());
         for i in 0..new_gen.len() {
-            if chance(0.1) {
+            if chance(0.03) {
                 self.mutate(&mut new_gen[i]);
             }
         }
