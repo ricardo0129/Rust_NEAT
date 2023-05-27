@@ -312,14 +312,7 @@ impl Population {
         for _ in 0..only_mutate {
             let mut u = (rand_i32(1, top_members) - 1) as usize;
             u = best_ones[u].1 as usize;
-            let mut offspring = curr_gen[u].clone();
-            if chance(MUTATE_EDGES) {
-                if chance(0.9) {
-                    offspring.permute_weights();
-                } else {
-                    offspring.new_weights();
-                }
-            }
+            let offspring = curr_gen[u].clone();
             new_gen.push(offspring);
         }
         remaining_offspring -= only_mutate;
@@ -333,22 +326,25 @@ impl Population {
             }
             u = best_ones[u].1 as usize;
             v = best_ones[v].1 as usize;
-            let mut offspring = self.breed(&curr_gen[u], &curr_gen[v]);
-            if chance(MUTATE_EDGES) {
-                if chance(0.9) {
-                    offspring.permute_weights();
-                } else {
-                    offspring.new_weights();
-                }
-            }
+            let offspring = self.breed(&curr_gen[u], &curr_gen[v]);
             new_gen.push(offspring);
         }
         for i in 0..new_gen.len() {
+            if champion_flag == 1 && i == 0 {
+                continue;
+            }
             if chance(RANDOM_SPLIT) {
                 self.random_split(&mut new_gen[i]);
             }
             if chance(RANDOM_EDGE) {
                 self.random_edge(&mut new_gen[i]);
+            }
+            if chance(MUTATE_EDGES) {
+                if chance(0.9) {
+                    new_gen[i].permute_weights();
+                } else {
+                    new_gen[i].new_weights();
+                }
             }
         }
         new_gen

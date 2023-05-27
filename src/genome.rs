@@ -129,6 +129,22 @@ impl Genome {
         }
     }
 
+    pub fn random_disable(&mut self) -> bool {
+        if self.edges.len() == 0 {
+            return false;
+        }
+        let mut idx = rand_i32(0, self.edges.len() as i32 - 1);
+        //Iterating over all elements since self.edges is a BST
+        for e in self.edges.iter() {
+            if idx == 0 {
+                self.disable_edge(e.0, e.1);
+                return true;
+            }
+            idx -= 1;
+        }
+        return false;
+    }
+
     pub fn node_exists(&self, inno_number: i32) -> bool {
         for n in &self.nodes {
             if n.borrow().global_id == inno_number {

@@ -45,7 +45,7 @@ pub fn run_all(pop: &Population, stop: &mut bool) -> Vec<f64> {
     for k in 0..cummulative.len() {
         cummulative[k] = 4.0 - (cummulative[k]);
         //cummulative[k] = cummulative[k] * cummulative[k];
-        cummulative[k] *= 100.0;
+        cummulative[k] *= 20.0;
     }
     let max_idx: usize = cummulative
         .iter()
@@ -82,18 +82,19 @@ pub fn run_all(pop: &Population, stop: &mut bool) -> Vec<f64> {
 
 fn main() {
     let mut p1: Population = Population::new(150, 2, 1, sigmoid, true);
-    for i in 0..100 {
+    for i in 0..80 {
         let start = Instant::now(); // Record the starting time
         let mut stop: bool = false;
         let mut outs = run_all(&p1, &mut stop);
         println!("iteration {} unique nodes {}", i, p1.unique_nodes);
         if stop {
             println!("Found Optimal Solution After {} generations", i);
-            break;
+            return;
         }
         p1.next_generation(&mut outs);
         println!("Elapsed time: {} milliseconds", start.elapsed().as_millis());
         p1.population_info();
         println!("---------------------------------------------------------");
     }
+    println!("NO OPTIMAL SOLUTION FOUND");
 }
