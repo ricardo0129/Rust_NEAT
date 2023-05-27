@@ -38,13 +38,14 @@ pub fn run_all(pop: &Population, stop: &mut bool) -> Vec<f64> {
             in1.push(j as f64);
             let outs = pop.evaluate_all(&in1, metric);
             for k in 0..outs.len() {
-                cummulative[k] += outs[k] / 4.0;
+                cummulative[k] += outs[k];
             }
         }
     }
     for k in 0..cummulative.len() {
-        cummulative[k] = 1.0 - cummulative[k];
+        cummulative[k] = 4.0 - (cummulative[k]);
         //cummulative[k] = cummulative[k] * cummulative[k];
+        cummulative[k] *= 100.0;
     }
     let max_idx: usize = cummulative
         .iter()
@@ -61,10 +62,17 @@ pub fn run_all(pop: &Population, stop: &mut bool) -> Vec<f64> {
             let outs = pop.population[max_idx].evaluate(&in1);
             let actual = i ^ j;
             abs_error += f64::abs(actual as f64 - outs[0]);
-            println!("actual {} expected {}", outs[0], actual)
+            println!(
+                "actual {} expected {} error {}",
+                outs[0],
+                actual,
+                f64::abs(outs[0] - (actual as f64))
+            )
         }
     }
     println!("best fitness {} error {}", cummulative[max_idx], abs_error);
+    //pop.population[max_idx].network_info();
+
     if abs_error <= 0.0001 {
         pop.population[max_idx].network_info();
         *stop = true;
@@ -73,17 +81,19 @@ pub fn run_all(pop: &Population, stop: &mut bool) -> Vec<f64> {
 }
 
 fn main() {
-    let mut p1: Population = Population::new(1000, 2, 1, sigmoid, true);
-    for i in 0..3000 {
+    let mut p1: Population = Population::new(150, 2, 1, sigmoid, true);
+    for i in 0..100 {
         let start = Instant::now(); // Record the starting time
         let mut stop: bool = false;
         let mut outs = run_all(&p1, &mut stop);
-        println!("iteration {}", i);
+        println!("iteration {} unique nodes {}", i, p1.unique_nodes);
         if stop {
             println!("Found Optimal Solution After {} generations", i);
             break;
         }
         p1.next_generation(&mut outs);
         println!("Elapsed time: {} milliseconds", start.elapsed().as_millis());
+        p1.population_info();
+        println!("---------------------------------------------------------");
     }
 }

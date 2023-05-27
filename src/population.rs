@@ -108,7 +108,7 @@ impl Population {
             if genome.edge_exist(e.0, e.1) {
                 genome.enable_edge(e.0, e.1);
             } else {
-                genome.add_edge(e.0, e.1, inno, rand_f64(-1.0, 1.0), true);
+                genome.add_edge(e.0, e.1, inno, rand_f64(-MAX_WEIGHT, MAX_WEIGHT), true);
             }
         }
     }
@@ -270,7 +270,6 @@ impl Population {
             }
         }
         for i in 0..new_species.len() {
-            //let u = rand::thread_rng().gen_range(1..=new_species[i].organisms.len()) - 1;
             let u = rand_i32(1, new_species[i].organisms.len() as i32) - 1;
             let leader_idx = new_species[i].organisms[u as usize];
             new_species[i].leader = leader_idx;
@@ -279,13 +278,17 @@ impl Population {
     }
 
     pub fn create_species(
-        &self,
-        curr_gen: &Vec<&Genome>,
+        &mut self,
+        gen_idx: i32,
         fitness: &Vec<f64>,
         number_offspring: i32,
     ) -> Vec<Genome> {
         //only use the highest performing members of each species to reproduce
         //If the species has > 5 networks then keep the champion
+        let mut curr_gen: Vec<&Genome> = vec![];
+        for a in &self.previous_gen[gen_idx as usize].organisms {
+            curr_gen.push(&self.population[*a as usize]);
+        }
         let mut best_ones: Vec<(f64, i32)> = vec![];
         for i in 0..fitness.len() {
             best_ones.push((fitness[i], i as i32));
@@ -296,7 +299,7 @@ impl Population {
         let mut champion_flag: i32 = 0;
         let mut new_gen: Vec<Genome> = vec![];
         if curr_gen.len() > 5 {
-            //champion_flag = ((curr_gen.len() as f64) * 0.05).floor() as i32;
+            //champion_flag = ((curr_gen.len() as f64) * 0.1).floor() as i32;
             champion_flag = 1;
             champion_flag = i32::min(champion_flag, number_offspring);
             for k in 0..champion_flag {
@@ -339,6 +342,14 @@ impl Population {
                 }
             }
             new_gen.push(offspring);
+        }
+        for i in 0..new_gen.len() {
+            if chance(RANDOM_SPLIT) {
+                self.random_split(&mut new_gen[i]);
+            }
+            if chance(RANDOM_EDGE) {
+                self.random_edge(&mut new_gen[i]);
+            }
         }
         new_gen
     }
@@ -394,34 +405,39 @@ impl Population {
         }
         let mut new_gen: Vec<Genome> = vec![];
         let mut idx: usize = 0;
-        assert!(number_offspring.len() == self.previous_gen.len());
-        for s in &self.previous_gen {
-            if s.organisms.len() == 0 || number_offspring[idx] == 0 {
+        //for s in self.previous_gen {
+        for i in 0..self.previous_gen.len() {
+            if self.previous_gen[i].organisms.len() == 0 || number_offspring[idx] == 0 {
                 idx += 1;
                 continue;
             }
-            let mut curr: Vec<&Genome> = vec![];
             let mut fit: Vec<f64> = vec![];
-            for a in &s.organisms {
-                curr.push(&self.population[*a as usize]);
+            for a in &self.previous_gen[i].organisms {
+                //curr.push(&self.population[*a as usize]);
                 fit.push(fitness[*a as usize]);
             }
-            let adding = self.create_species(&curr, &fit, number_offspring[idx]);
+            let adding = self.create_species(i as i32, &fit, number_offspring[idx]);
             new_gen.extend(adding);
             idx += 1;
         }
 
         assert_eq!(new_gen.len(), self.population.len());
-        for i in 0..new_gen.len() {
-            if chance(RANDOM_EDGE) {
-                self.random_edge(&mut new_gen[i]);
-            }
-            if chance(RANDOM_SPLIT) {
-                self.random_split(&mut new_gen[i]);
-            }
-        }
         self.previous_gen = self.speciate(&new_gen);
         self.population = new_gen;
         self.gen += 1;
+    }
+
+    pub fn population_info(&self) {
+        let mut total_nodes: i32 = 0;
+        let mut total_connections: i32 = 0;
+        for n in &self.population {
+            total_nodes += n.num_nodes;
+            total_connections += n.num_connections;
+        }
+        let pop_size: f64 = self.population.len() as f64;
+        let average_nodes: f64 = (total_nodes as f64) / pop_size;
+        let average_connections: f64 = (total_connections as f64) / pop_size;
+        println!("Average # Nodes: {}", average_nodes);
+        println!("Average # Connections: {}", average_connections);
     }
 }

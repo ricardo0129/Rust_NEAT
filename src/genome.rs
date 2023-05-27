@@ -1,3 +1,4 @@
+use crate::constants::MAX_WEIGHT;
 use crate::helper::{pertube, rand_f64, rand_i32};
 use crate::node::Node;
 use std::cell::RefCell;
@@ -29,7 +30,7 @@ impl Genome {
         //and all Inputs connected to all Outputs
         let num_nodes = input_nodes + output_nodes + 1;
         let mut nodes: Vec<Rc<RefCell<Node>>> = vec![];
-        for i in 0..(input_nodes + output_nodes + 1) {
+        for i in 0..(num_nodes) {
             nodes.push(Rc::new(RefCell::new(Node::new(i, i, act))));
         }
         return Self {
@@ -105,7 +106,7 @@ impl Genome {
                     i,
                     j + self.input_nodes + 1,
                     i * self.output_nodes + j,
-                    rand_f64(-1.0, 1.0),
+                    rand_f64(-MAX_WEIGHT, MAX_WEIGHT),
                     true,
                 );
             }
@@ -123,9 +124,18 @@ impl Genome {
     pub fn new_weights(&mut self) {
         for n in &self.nodes {
             for edges in &mut n.borrow_mut().adj {
-                edges.weight = rand_f64(-1.0, 1.0);
+                edges.weight = rand_f64(-MAX_WEIGHT, MAX_WEIGHT);
             }
         }
+    }
+
+    pub fn node_exists(&self, inno_number: i32) -> bool {
+        for n in &self.nodes {
+            if n.borrow().global_id == inno_number {
+                return true;
+            }
+        }
+        return false;
     }
 
     pub fn add_node(&mut self, inno_number: i32) -> i32 {
@@ -183,7 +193,9 @@ impl Genome {
     }
 
     pub fn split_edge(&mut self, from: i32, to: i32, inno_number: i32, new_node_id: i32) {
-        assert!(from != self.input_nodes);
+        if self.node_exists(new_node_id) {
+            return;
+        }
         self.disable_edge(from, to);
         let old_weight = self.nodes[from as usize].borrow().edge_weight(to);
         let id = self.add_node(new_node_id);
@@ -331,6 +343,11 @@ impl Genome {
         );
         for i in 0..self.nodes.len() {
             println!("{}", self.nodes[i].borrow().global_id);
+        }
+        for n in &self.nodes {
+            for e in &n.borrow().adj {
+                println!("{} {}", n.borrow().global_id, e.to.borrow().global_id)
+            }
         }
     }
 }
